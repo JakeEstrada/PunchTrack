@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manager Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <style>
+        /* Consistent table styling */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        table th, table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+        table th {
+            background-color: #f4f4f4;
+            font-weight: bold;
+        }
+        table tr:hover {
+            background-color: #f1f1f1;
+        }
+
+        /* Sidebar styling */
+        .sidebar {
+            width: 250px;
+            height: 100%;
+            background-color: #2c3e50;
+            position: fixed;
+            top: 0;
+            left: 0;
+            padding: 20px;
+            color: white;
+        }
+        .sidebar h2 {
+            font-size: 20px;
+            margin-bottom: 20px;
+        }
+        .sidebar ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        .sidebar ul li {
+            margin: 10px 0;
+        }
+        .sidebar ul li a {
+            color: white;
+            text-decoration: none;
+            display: block;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .sidebar ul li a:hover {
+            background-color: #34495e;
+        }
+
+        /* Main content area */
+        .main-content {
+            margin-left: 270px; /* Leave space for the sidebar */
+            padding: 20px;
+        }
+
+        h1, h3 {
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <h2>Manager Dashboard</h2>
+        <ul>
+            <li><a href="#">Dashboard Overview</a></li>
+            <li><a href="#">Employee Details</a></li>
+            <li><a href="#">Reports</a></li>
+            <li><a href="#">Settings</a></li>
+        </ul>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <h1>Manager Dashboard</h1>
+        <h3>Work Week Ending: {{ week_ending }}</h3>
+
+        <!-- Employee Summary Table -->
+        <table>
+            <thead>
+                <tr>
+                    <th>Employee Name</th>
+                    <th>Total Hours</th>
+                    <th>Overtime</th>
+                    <th>Weighted Hours</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for employee in employees %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('view_employee', employee_id=employee['employee_id'], week_ending=week_ending) }}">
+                            {{ employee['first_name'] }} {{ employee['last_name'] }}
+                        </a>
+                    </td>
+                    <td>{{ employee['total_hours'] }}</td>
+                    <td>{{ employee['overtime'] }}</td>
+                    <td>{{ employee['weighted_hours'] }}</td>
+                    <td>
+                        <a href="{{ url_for('view_employee', employee_id=employee['employee_id'], week_ending=week_ending) }}" class="btn">
+                            View Details
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
+
+
+
+
+@app.route("/employee-dashboard", defaults={'week_id': None})
+@app.route("/employee-dashboard/<week_id>")
+def employee_dashboard(week_id):
+    if "employee_id" not in session:
+        return redirect(url_for("login"))
+
+    db = get_db()
+    cursor = db.cursor()
+
+    # If no week_id is provided, fetch the most recent one
+    if not week_id:
+        cursor.execute(
+            "SELECT MAX(week_id) AS latest_week_id FROM WeekLog WHERE employee_id = ?",
+            (session["employee_id"],)
+        )
+        result = cursor.fetchone()
+        week_id = result["latest_week_id"] if result and result["latest_week_id"] else None
+
+    # Query for employee details
+    cursor.execute(
+        "SELECT first_name, last_name, employee_role FROM Employee WHERE employee_id = ?",
+        (session["employee_id"],)
+    )
+    employee = cursor.fetchone()
+
+    # Query for the week's logs
+    cursor.execute(
+        """
+        SELECT record_date AS day, punch_in_time AS clock_in, punch_out_time AS clock_out, 
+               break_start_time AS break_start, break_end_time AS break_end 
+        FROM PunchRecord
+        WHERE employee_id = ? AND week_id = ?
+        """,
+        (session["employee_id"], week_id)
+    )
+    work_logs = cursor.fetchall()
+
+    # Enrich logs with calculations
+    enriched_logs = []
+    total_hours = total_overtime = total_weighted_hours = 0
+
+    for log in work_logs:
+        clock_in = log["clock_in"]
+        clock_out = log["clock_out"]
+        break_start = log["break_start"]
+        break_end = log["break_end"]
+
+        break_duration = calculate_break_duration(break_start, break_end)
+        hours = calculate_daily_hours(clock_in, clock_out, break_duration)
+        overtime = calculate_overtime(hours)
+        weighted_hours = calculate_weighted_hours(hours, overtime)
+
+        total_hours += hours
+        total_overtime += overtime
+        total_weighted_hours += weighted_hours
+
+        enriched_logs.append({
+            "day": log["day"],
+            "clock_in": clock_in,
+            "clock_out": clock_out,
+            "break_start": break_start,
+            "break_end": break_end,
+            "break_duration": break_duration,
+            "hours": hours,
+            "overtime": overtime,
+            "weighted_hours": weighted_hours,
+        })
+
+    # Query for week navigation and ending day
+    cursor.execute(
+        "SELECT week_ending_day FROM WeekLog WHERE week_id = ?",
+        (week_id,)
+    )
+    week_ending_day = cursor.fetchone()
+
+    cursor.execute(
+        "SELECT week_id FROM WeekLog WHERE employee_id = ? AND week_id < ? ORDER BY week_id DESC LIMIT 1",
+        (session["employee_id"], week_id)
+    )
+    previous_week = cursor.fetchone()
+
+    cursor.execute(
+        "SELECT week_id FROM WeekLog WHERE employee_id = ? AND week_id > ? ORDER BY week_id ASC LIMIT 1",
+        (session["employee_id"], week_id)
+    )
+    next_week = cursor.fetchone()
+
+    return render_template(
+        "dashboard.html",
+        employee=employee,
+        work_logs=enriched_logs,
+        week_end_date=week_ending_day["week_ending_day"] if week_ending_day else "Unknown",
+        total_hours=round(total_hours, 2),
+        total_overtime=round(total_overtime, 2),
+        total_weighted_hours=round(total_weighted_hours, 2),
+        previous_week_id=previous_week["week_id"] if previous_week else None,
+        next_week_id=next_week["week_id"] if next_week else None,
+    )
