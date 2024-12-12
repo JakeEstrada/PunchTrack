@@ -71,14 +71,13 @@
         <button class="btn btn-secondary w-100 mb-2" id="view-logs-btn">View Logs</button>
         <button class="btn btn-secondary w-100 mb-2">Add Receipts</button>
         <button class="btn btn-secondary w-100 mb-2" id="add-miles-btn">Add Miles</button>
+        <button class="btn btn-secondary w-100 mb-2" id="punch-recorder-btn">Punch-In/Out</button>
+       
 
-        <script>
-            document.getElementById("add-miles-btn").addEventListener("click", function() {
-                window.location.href = "{{ url_for('miles_log') }}";
-            });
-        </script>
 
-        <button class="btn btn-secondary w-100 mb-2" disabled>Admin Settings</button>
+    
+    
+
     </div>
 
     <!-- Toggle Sidebar Button -->
@@ -92,21 +91,25 @@
             <div>Employee ID: {{ session["employee_id"] }}</div>
         </div>
 
+        <!-- Display Week Ending Date -->
+        <div class="text-center my-4">
+            <h4>Week Ending: {{ week_ending_date }}</h4>
+        </div>
+
+
         <!-- Navigation Buttons -->
         <div class="navigation-buttons">
-            <!-- Previous Week Button -->
             <a href="{{ url_for('employee_dashboard', week_id=previous_week_id) }}"
                class="btn btn-primary" {% if not previous_week_id %}disabled{% endif %}>
                 &larr; Previous Week
             </a>
-
-            <!-- Next Week Button -->
             <a href="{{ url_for('employee_dashboard', week_id=next_week_id) }}"
                class="btn btn-primary" {% if not next_week_id %}disabled{% endif %}>
                 Next Week &rarr;
             </a>
         </div>
 
+        <!-- Logs Table -->
         <div class="table-container">
             <table class="table table-bordered">
                 <thead>
@@ -116,55 +119,158 @@
                         <th>Clock Out</th>
                         <th>Break Duration (min)</th>
                         <th>Hours</th>
-                        <th>Miles Driven</th>
                         <th>Overtime</th>
                         <th>Weighted Hours</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for log in work_logs %}
-                    <tr>
+                    <tr id="row-{{ log['day'] }}">
                         <td>{{ log["day"] }}</td>
                         <td>{{ log["clock_in"] }}</td>
                         <td>{{ log["clock_out"] }}</td>
                         <td>{{ log["break_duration"] }}</td>
                         <td>{{ log["hours"] }}</td>
-                        <td>{{ log["miles_driven"] }}</td>
                         <td>{{ log["overtime"] }}</td>
                         <td>{{ log["weighted_hours"] }}</td>
+                        <td>
+                           <button class="btn btn-danger delete-btn" onclick='deleteRow("{{ log["day"] }}")'>Delete</button> 
+                        </td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="7" class="text-center">No data available for this week.</td>
+                        <td colspan="8" class="text-center">No data available for this week.</td>
                     </tr>
                     {% endfor %}
-                    <!-- Weekly Totals -->
+                </tbody>
+                <tfoot>
                     <tr>
                         <td colspan="4" class="text-end fw-bold">Total:</td>
                         <td class="fw-bold">{{ total_hours }}</td>
-                        <td class="fw-bold">{{ total_miles }}</td>
                         <td class="fw-bold">{{ total_overtime }}</td>
                         <td class="fw-bold">{{ total_weighted_hours }}</td>
+                        <td></td>
                     </tr>
-                </tbody>
+                </tfoot>
             </table>
+        </div>
+
+        <!-- Add Row Button -->
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addRowModal">Add Row</button>
+    </div>
+
+    <!-- Add Row Modal -->
+    <div class="modal fade" id="addRowModal" tabindex="-1" aria-labelledby="addRowModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addRowModalLabel">Add New Log</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addRowForm">
+                        <div class="mb-3">
+                            <label for="record_date" class="form-label">Date</label>
+                            <select id="record_date" class="form-select">
+                                {% for day in available_days %}
+                                <option value="{{ day }}">{{ day }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="clock_in" class="form-label">Clock In (HH:MM)</label>
+                            <input type="time" id="clock_in" class="form-control">
+                        </div>
+                        <div class="mb-3">
+                            <label for="clock_out" class="form-label">Clock Out (HH:MM)</label>
+                            <input type="time" id="clock_out" class="form-control">
+                        </div>
+                        <div class="mb-3">
+                            <label for="break_start" class="form-label">Break Start (HH:MM)</label>
+                            <input type="time" id="break_start" class="form-control">
+                        </div>
+                        <div class="mb-3">
+                            <label for="break_end" class="form-label">Break End (HH:MM)</label>
+                            <input type="time" id="break_end" class="form-control">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" onclick="addRow()">Add Row</button>
+                </div>
+            </div>
         </div>
     </div>
 
+    <!-- JavaScript -->
     <script>
-        // Toggle Sidebar
-        const sidebar = document.querySelector('.sidebar');
-        const container = document.querySelector('.container');
-        const toggleBtn = document.querySelector('.toggle-btn');
+    document.getElementById("punch-recorder-btn").addEventListener("click", function () {
+        window.location.href = "{{ url_for('punch_recorder') }}";
+    });
 
-        toggleBtn.addEventListener('click', () => {
-            sidebar.classList.toggle('collapsed');
-            container.classList.toggle('collapsed');
-            toggleBtn.classList.toggle('collapsed');
+    document.getElementById("add-miles-btn").addEventListener("click", function() {
+            window.location.href = "{{ url_for('miles_log') }}";
         });
+        // Add Row Function
+        function addRow() {
+            const recordDate = document.getElementById("record_date").value;
+            const clockIn = document.getElementById("clock_in").value;
+            const clockOut = document.getElementById("clock_out").value;
+            const breakStart = document.getElementById("break_start").value;
+            const breakEnd = document.getElementById("break_end").value;
 
-        // View Logs Button
-        document.getElementById("view-logs-btn").addEventListener("click", function() {
+            if (!recordDate || !clockIn || !clockOut) {
+                alert("Please fill in all required fields (Date, Clock In, Clock Out).");
+                return;
+            }
+
+            const rowData = {
+                record_date: recordDate,
+                clock_in: clockIn,
+                clock_out: clockOut,
+                break_start: breakStart || null,
+                break_end: breakEnd || null,
+            };
+
+            fetch("/add-row", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(rowData),
+            })
+                .then((response) => {
+                    if (response.ok) {
+                        alert("Row added successfully!");
+                        location.reload();
+                    } else {
+                        alert("Failed to add row. Please try again.");
+                    }
+                })
+                .catch((error) => {
+                    console.error("Error adding row:", error);
+                    alert("An error occurred. Please try again.");
+                });
+        }
+
+        // Delete Row Function
+        const deleteRow = (day) => {
+            if (confirm("Are you sure you want to delete this record?")) {
+                fetch(`/delete-log/${day}`, {
+                    method: "DELETE",
+                })
+                    .then(() => {
+                        location.reload();
+                    })
+                    .catch((error) => {
+                        console.error("Error deleting row:", error);
+                        alert("An error occurred. Please try again.");
+                    });
+            }
+        };
+        
+
+        document.getElementById("view-logs-btn").addEventListener("click", function () {
             window.location.href = "{{ url_for('view_logs') }}";
         });
     </script>

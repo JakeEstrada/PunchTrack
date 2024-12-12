@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <style>
+        body {
+            background-color: #f8f9fa;
+            margin: 20px;
+        }
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        .card {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center my-4">Admin Dashboard</h1>
+
+        <!-- Employee Logs -->
+        <div id="employee-logs">
+            <div class="section-title">Employee Logs</div>
+            {% for employee in employees %}
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    Employee: {{ employee["first_name"] }} {{ employee["last_name"] }} (ID: {{ employee["employee_id"] }})
+                </div>
+                <div class="card-body">
+                    <h5 class="card-title">Weekly Logs</h5>
+                    <table class="table table-bordered">
+                        <thead>
+                            <tr>
+                                <th>Day</th>
+                                <th>Clock In</th>
+                                <th>Clock Out</th>
+                                <th>Break Duration</th>
+                                <th>Hours</th>
+                                <th>Overtime</th>
+                                <th>Weighted Hours</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in employee["logs"] %}
+                            <tr>
+                                <td>{{ log["day"] }}</td>
+                                <td>{{ log["clock_in"] }}</td>
+                                <td>{{ log["clock_out"] }}</td>
+                                <td>{{ log["break_duration"] }}</td>
+                                <td>{{ log["hours"] }}</td>
+                                <td>{{ log["overtime"] }}</td>
+                                <td>{{ log["weighted_hours"] }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7" class="text-center">No data available for this week.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Miles -->
+        <div id="miles">
+            <div class="section-title">Miles Records</div>
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>Employee</th>
+                        <th>Date</th>
+                        <th>Miles Driven</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for mile in miles %}
+                    <tr>
+                        <td>{{ mile["employee_name"] }}</td>
+                        <td>{{ mile["date"] }}</td>
+                        <td>{{ mile["miles_driven"] }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="3" class="text-center">No miles recorded.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Change Logs -->
+            <h3>Change Logs</h3>
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>Change ID</th>
+                        <th>Change Date</th>
+                        <th>Change Time</th>
+                        <th>Employee ID</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in change_logs %}
+                    <tr>
+                        <td>{{ log["change_id"] }}</td>
+                        <td>{{ log["change_date"] }}</td>
+                        <td>{{ log["change_time"] }}</td>
+                        <td>{{ log["employee_id"] }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

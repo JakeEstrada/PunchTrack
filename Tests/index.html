@@ -1,25 +1,64 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Employee Data</title>
-</head>
-<body>
-    <h1>Employee List</h1>
-    <table border="1">
+<table>
+    <thead>
         <tr>
-            <th>Employee ID</th>
-            <th>First Name</th>
-            <th>Last Name</th>
-            <th>Role</th>
+            <th>Day</th>
+            <th>Clock In</th>
+            <th>Clock Out</th>
+            <th>Break Duration (min)</th>
+            <th>Hours</th>
+            <th>Miles Driven</th>
+            <th>Overtime</th>
+            <th>Weighted Hours</th>
+            <th>Actions</th>
         </tr>
-        {% for row in employees %}
+    </thead>
+    <tbody>
+        {% for log in work_logs %}
         <tr>
-            <td>{{ row[0] }}</td>
-            <td>{{ row[1] }}</td>
-            <td>{{ row[2] }}</td>
-            <td>{{ row[6] }}</td>
+            <td>{{ log.day }}</td>
+            <td>{{ log.clock_in }}</td>
+            <td>{{ log.clock_out }}</td>
+            <td>{{ log.break_duration }}</td>
+            <td>{{ log.hours }}</td>
+            <td>{{ log.miles_driven }}</td>
+            <td>{{ log.overtime }}</td>
+            <td>{{ log.weighted_hours }}</td>
+            <td>
+                <button onclick="openEditForm('{{ log.day }}', '{{ log.clock_in }}', '{{ log.clock_out }}', '{{ log.break_duration }}', '{{ log.miles_driven }}')">Edit</button>
+            </td>
         </tr>
         {% endfor %}
-    </table>
-</body>
-</html>
+    </tbody>
+</table>
+
+<!-- Edit Form Modal -->
+<div id="editForm" style="display:none;">
+    <form method="POST" action="/edit-log">
+        <input type="hidden" name="day" id="editDay">
+        <label for="editClockIn">Clock In:</label>
+        <input type="time" name="clock_in" id="editClockIn">
+        <label for="editClockOut">Clock Out:</label>
+        <input type="time" name="clock_out" id="editClockOut">
+        <label for="editBreakDuration">Break Duration (min):</label>
+        <input type="number" name="break_duration" id="editBreakDuration">
+        <label for="editMilesDriven">Miles Driven:</label>
+        <input type="number" name="miles_driven" id="editMilesDriven">
+        <button type="submit">Save Changes</button>
+        <button type="button" onclick="closeEditForm()">Cancel</button>
+    </form>
+</div>
+
+<script>
+function openEditForm(day, clockIn, clockOut, breakDuration, milesDriven) {
+    document.getElementById("editDay").value = day;
+    document.getElementById("editClockIn").value = clockIn;
+    document.getElementById("editClockOut").value = clockOut;
+    document.getElementById("editBreakDuration").value = breakDuration;
+    document.getElementById("editMilesDriven").value = milesDriven;
+    document.getElementById("editForm").style.display = "block";
+}
+
+function closeEditForm() {
+    document.getElementById("editForm").style.display = "none";
+}
+</script>

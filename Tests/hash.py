@@ -2,7 +2,7 @@ import bcrypt
 
 # List of passwords
 passwords = [
-    "Ocean^9215",
+    "adminPW-1212",
     "Sunset!1743",
     "Sunflower#537",
     "Mountain%485",

@@ -1,6 +1,21 @@
 from datetime import datetime, timedelta
 from collections import defaultdict
 
+def parse_time(time_str):
+    """
+    Parse a time string in either '%H:%M:%S' or '%H:%M' format.
+    """
+    try:
+        # Try parsing as '%H:%M:%S'
+        return datetime.strptime(time_str, "%H:%M:%S")
+    except ValueError:
+        try:
+            # Try parsing as '%H:%M'
+            return datetime.strptime(time_str, "%H:%M")
+        except ValueError:
+            # Handle invalid time format
+            raise ValueError(f"Time data '{time_str}' does not match format '%H:%M:%S' or '%H:%M'")
+
 def calculate_break_duration(break_start, break_end):
     """
     Calculate the duration of a break in minutes.
@@ -8,13 +23,14 @@ def calculate_break_duration(break_start, break_end):
     if not break_start or not break_end:
         return 0.0  # No break if either time is missing
 
-    # Parse the time strings
-    break_start_time = datetime.strptime(break_start, "%H:%M:%S")
-    break_end_time = datetime.strptime(break_end, "%H:%M:%S")
+    # Parse times using the updated function
+    break_start_time = parse_time(break_start)
+    break_end_time = parse_time(break_end)
 
     # Calculate the duration
     duration = break_end_time - break_start_time
     return duration.total_seconds() / 60  # Convert seconds to minutes
+
 
 def time_to_hours(time_str):
     """Convert HH:MM time format to hours as a float."""
@@ -23,13 +39,23 @@ def time_to_hours(time_str):
 
 def calculate_daily_hours(clock_in, clock_out, break_duration):
     print(f"Clock-in: {clock_in}, Clock-out: {clock_out}, Break Duration: {break_duration}")
+    
     if not clock_in or not clock_out:
         return 0
+
+    # Normalize time format
+    if len(clock_in.split(":")) == 2:
+        clock_in += ":00"  # Add seconds if missing
+    if len(clock_out.split(":")) == 2:
+        clock_out += ":00"
+
     clock_in_time = datetime.strptime(clock_in, "%H:%M:%S")
     clock_out_time = datetime.strptime(clock_out, "%H:%M:%S")
+
     total_worked = (clock_out_time - clock_in_time).seconds / 3600
     print(f"Total Worked (raw): {total_worked} hours")
     return round(total_worked - break_duration / 60, 2)
+
 
 
 
