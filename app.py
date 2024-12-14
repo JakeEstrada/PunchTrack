@@ -3,6 +3,8 @@ import bcrypt
 from calculations import calculate_weekly_totals, calculate_break_duration, calculate_daily_hours, calculate_overtime, calculate_weighted_hours
 from flask import Flask, session, render_template, request, g, redirect, url_for, flash, jsonify
 from datetime import datetime, timedelta
+from Tests.ai_summary import generate_employee_summary
+import os
 
 
 app = Flask(__name__)
@@ -25,6 +27,18 @@ def login():
         if user:
             session["employee_id"] = user["employee_id"]
             session["username"] = user["username"]
+            
+            # Check if user is admin
+            db = get_db()
+            cursor = db.cursor()
+            cursor.execute(
+                "SELECT employee_role FROM Employee WHERE employee_id = ?",
+                (user["employee_id"],)
+            )
+            user_data = cursor.fetchone()
+            
+            if user_data and user_data["employee_role"] == "Admin":
+                return redirect(url_for("admin_dashboard"))
             return redirect(url_for("employee_dashboard"))
         else:
             flash("Invalid username or password!", "error")
@@ -137,46 +151,82 @@ def store_action():
 
 @app.route("/admin-dashboard")
 def admin_dashboard():
-    try:
-        db = get_db()  # Initialize database connection
-        cursor = db.cursor()
+    if "employee_id" not in session:
+        return redirect(url_for("login"))
+        
+    # Check if user is admin
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute(
+        "SELECT employee_role FROM Employee WHERE employee_id = ?",
+        (session["employee_id"],)
+    )
+    user = cursor.fetchone()
+    
+    if not user or user["employee_role"] != "Admin":
+        flash("Unauthorized access!", "error")
+        return redirect(url_for("employee_dashboard"))
 
-        # Fetch all employees
-        cursor.execute("SELECT * FROM Employee")
-        employees = cursor.fetchall()
+    # Fetch all employees and their logs
+    cursor.execute("""
+        SELECT e.*, 
+               p.record_date as day,
+               p.punch_in_time as clock_in,
+               p.punch_out_time as clock_out,
+               p.break_start_time,
+               p.break_end_time
+        FROM Employee e
+        LEFT JOIN PunchRecord p ON e.employee_id = p.employee_id
+        WHERE e.employee_id != ?
+        ORDER BY e.employee_id, p.record_date DESC
+    """, (session["employee_id"],))
+    
+    employees_data = cursor.fetchall()
+    
+    # Organize data by employee
+    employees = {}
+    for row in employees_data:
+        emp_id = row["employee_id"]
+        if emp_id not in employees:
+            employees[emp_id] = {
+                "employee_id": emp_id,
+                "first_name": row["first_name"],
+                "last_name": row["last_name"],
+                "logs": []
+            }
+        if row["day"]:  # Only add if there's a log
+            break_duration = calculate_break_duration(row["break_start_time"], row["break_end_time"])
+            hours = calculate_daily_hours(row["clock_in"], row["clock_out"], break_duration)
+            overtime = calculate_overtime(hours)
+            weighted_hours = calculate_weighted_hours(hours, overtime)
+            
+            employees[emp_id]["logs"].append({
+                "day": row["day"],
+                "clock_in": row["clock_in"],
+                "clock_out": row["clock_out"],
+                "break_duration": break_duration,
+                "hours": hours,
+                "overtime": overtime,
+                "weighted_hours": weighted_hours
+            })
+    
+    # Fetch miles records
+    cursor.execute("""
+        SELECT m.*, e.first_name || ' ' || e.last_name as employee_name
+        FROM MilesLog m
+        JOIN Employee e ON m.employee_id = e.employee_id
+        ORDER BY miles_date DESC
+    """)
+    miles = cursor.fetchall()
+    
+    # Fetch change logs
+    cursor.execute("SELECT * FROM ChangeLog ORDER BY change_date DESC, change_time DESC")
+    change_logs = cursor.fetchall()
 
-        # Fetch all punch records
-        cursor.execute("""
-            SELECT * FROM PunchRecord
-            ORDER BY record_date DESC
-        """)
-        punch_records = cursor.fetchall()
-
-        # Fetch all miles records
-        cursor.execute("""
-            SELECT * FROM MilesLog
-            ORDER BY miles_date DESC
-        """)
-        miles_records = cursor.fetchall()
-
-        # Fetch all change logs (excluding 'description')
-        cursor.execute("""
-            SELECT change_id, change_date, change_time, employee_id
-            FROM ChangeLog
-            ORDER BY change_date DESC, change_time DESC
-        """)
-        change_logs = cursor.fetchall()
-
-        return render_template(
-            "admin_page.html",
-            employees=employees,
-            punch_records=punch_records,
-            miles_records=miles_records,
-            change_logs=change_logs
-        )
-    except Exception as e:
-        print(f"An error occurred in the admin_dashboard: {e}")
-        return render_template("error.html", error_message=str(e)), 500
+    return render_template("admin_page.html", 
+                         employees=list(employees.values()),
+                         miles=miles,
+                         change_logs=change_logs)
 
 
 
@@ -745,6 +795,69 @@ def close_connection(exception):
     if db is not None:
         db.close()
 
+
+@app.route("/generate-summary/<int:employee_id>")
+def generate_summary(employee_id):
+    if "employee_id" not in session:
+        return {"message": "Unauthorized"}, 403
+        
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        
+        # Fetch employee data
+        cursor.execute(
+            "SELECT * FROM Employee WHERE employee_id = ?",
+            (employee_id,)
+        )
+        employee_data = cursor.fetchone()
+        
+        # Fetch punch records
+        cursor.execute(
+            """
+            SELECT * FROM PunchRecord 
+            WHERE employee_id = ?
+            ORDER BY record_date DESC
+            LIMIT 30
+            """,
+            (employee_id,)
+        )
+        punch_records = cursor.fetchall()
+        
+        # Fetch absence records
+        cursor.execute(
+            """
+            SELECT * FROM AbsenceRecord 
+            WHERE employee_id = ?
+            ORDER BY absence_date DESC
+            """,
+            (employee_id,)
+        )
+        absence_records = cursor.fetchall()
+        
+        # Generate summary
+        summary = generate_employee_summary(employee_data, punch_records, absence_records)
+        
+        # Create summary file
+        filename = f"employee_{employee_id}_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        filepath = os.path.join('static', 'summaries', filename)
+        
+        # Ensure directory exists
+        os.makedirs(os.path.join('static', 'summaries'), exist_ok=True)
+        
+        # Write summary to file
+        with open(filepath, 'w') as f:
+            f.write(summary)
+            
+        return jsonify({
+            "message": "Summary generated successfully",
+            "filename": filename,
+            "summary": summary
+        })
+        
+    except Exception as e:
+        print(f"Error generating summary: {e}")
+        return {"message": "Error generating summary"}, 500
 
 
 if __name__ == "__main__":

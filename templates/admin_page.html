@@ -31,8 +31,12 @@
             <div class="section-title">Employee Logs</div>
             {% for employee in employees %}
             <div class="card">
-                <div class="card-header bg-primary text-white">
-                    Employee: {{ employee["first_name"] }} {{ employee["last_name"] }} (ID: {{ employee["employee_id"] }})
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <span>Employee: {{ employee["first_name"] }} {{ employee["last_name"] }} (ID: {{ employee["employee_id"] }})</span>
+                    <button class="btn btn-light btn-sm" 
+                            onclick="generateSummary({{ employee['employee_id'] }})">
+                        Generate Summary
+                    </button>
                 </div>
                 <div class="card-body">
                     <h5 class="card-title">Weekly Logs</h5>
@@ -122,5 +126,40 @@
             </table>
         </div>
     </div>
+
+    <!-- Add this at the bottom of the page, before closing body tag -->
+    <div class="modal fade" id="summaryModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Employee Summary</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <pre id="summaryText" style="white-space: pre-wrap;"></pre>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <a id="downloadLink" class="btn btn-primary" href="#" download>Download Summary</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    function generateSummary(employeeId) {
+        fetch(`/generate-summary/${employeeId}`)
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('summaryText').textContent = data.summary;
+                document.getElementById('downloadLink').href = `/static/summaries/${data.filename}`;
+                new bootstrap.Modal(document.getElementById('summaryModal')).show();
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error generating summary');
+            });
+    }
+    </script>
 </body>
 </html>
